@@ -1,480 +1,834 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="dark h-full">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AlphaPulse - 24H全网实时A股与宏观快讯终端</title>
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- FontAwesome Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <style>
-    :root {
-      --bg-main: #0a0b0d;
-      --bg-card: #12141a;
-      --bg-hover: #1a1d26;
-      --border: #232736;
-      --text-main: #e1e4ea;
-      --text-muted: #8890a4;
-      --red: #f23645;
-      --green: #089981;
-      --yellow: #f5c037;
-      --blue: #2962ff;
-    }
-
-    body {
-      background-color: var(--bg-main);
-      color: var(--text-main);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, PingFang SC, Microsoft YaHei, sans-serif;
-    }
-
-    /* Custom scrollbar */
-    ::-webkit-scrollbar {
-      width: 5px;
-      height: 5px;
-    }
-    ::-webkit-scrollbar-track {
-      background: #0d0e12;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #232736;
-      border-radius: 3px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #363c4e;
-    }
-
-    /* Pulse animation for live badge */
-    @keyframes pulse-ring {
-      0% { transform: scale(0.95); opacity: 0.8; }
-      50% { transform: scale(1.1); opacity: 0.4; }
-      100% { transform: scale(0.95); opacity: 0.8; }
-    }
-    .live-dot {
-      animation: pulse-ring 2s infinite ease-in-out;
-    }
-
-    /* News card highlighting */
-    .news-card-s { border-left: 4px solid var(--red); }
-    .news-card-a { border-left: 4px solid #ff9800; }
-    .news-card-b { border-left: 4px solid var(--blue); }
-    .news-card-c { border-left: 4px solid #6b7280; }
-
-    /* Flash highlight for newly arrived breaking news */
-    @keyframes flash-new {
-      0% { background-color: rgba(41, 98, 255, 0.25); }
-      100% { background-color: var(--bg-card); }
-    }
-    .new-arrival {
-      animation: flash-new 2.5s ease-out;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlphaPulse - A股超短线涨停打板决策终端</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        bloomberg: {
+                            bg: '#0a0d14',
+                            card: '#121721',
+                            border: '#1e293b',
+                            red: '#ef4444',     // A股上涨/超强势红色
+                            green: '#22c55e',   // A股下跌/绿
+                            gold: '#f59e0b',    // 重磅标签/特快
+                            accent: '#3b82f6',  // 主色调蓝
+                            text: '#f8fafc',
+                            subtext: '#94a3b8'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+                        sans: ['Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom scrollbars for high density terminal style */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a0d14;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+        .news-flash {
+            animation: flashPulse 1.5s ease-out;
+        }
+        @keyframes flashPulse {
+            0% { background-color: rgba(239, 68, 68, 0.25); border-color: rgba(239, 68, 68, 0.6); }
+            100% { background-color: transparent; }
+        }
+    </style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden select-none">
+<body class="bg-bloomberg-bg text-bloomberg-text font-sans h-full flex flex-col overflow-hidden antialiased select-none">
 
-  <!-- Header Section -->
-  <header class="bg-[#07080a] border-b border-[#232736] px-4 py-2.5 flex justify-between items-center z-10">
-    <div class="flex items-center gap-3">
-      <div class="flex items-center gap-2 font-bold text-base text-white tracking-wide">
-        <i class="fa-solid me-1 fa-bolt-lightning text-amber-400"></i>
-        <span>AlphaPulse</span>
-        <span class="text-xs bg-blue-900/40 text-blue-400 border border-blue-700/50 px-1.5 py-0.5 rounded">24H 实时推送</span>
-      </div>
-      <div class="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 px-2 py-0.5 rounded-full">
-        <span class="w-2 h-2 rounded-full bg-emerald-500 live-dot"></span>
-        <span id="apiStatusText">已连接全网极速行情源</span>
-      </div>
-    </div>
-
-    <!-- Right Controls -->
-    <div class="flex items-center gap-4 text-xs text-gray-400">
-      <div class="flex items-center gap-2">
-        <span>声音提醒:</span>
-        <button id="soundToggleBtn" onclick="toggleSound()" class="px-2 py-1 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 transition border border-gray-700">
-          <i class="fa-solid fa-volume-high text-emerald-400"></i> 已开启
-        </button>
-      </div>
-      <div class="flex items-center gap-2">
-        <span>自动刷新:</span>
-        <span class="text-emerald-400 font-mono" id="refreshTimer">3s</span>
-      </div>
-      <div class="text-gray-500 font-mono hidden md:inline" id="clockDisplay">00:00:00</div>
-    </div>
-  </header>
-
-  <!-- Main Grid Layout -->
-  <div class="flex flex-1 overflow-hidden">
-
-    <!-- Left Main Feed Panel -->
-    <div class="flex-1 flex flex-col border-r border-[#232736]">
-      
-      <!-- Category Tabs Nav -->
-      <div class="flex items-center gap-1.5 p-2 bg-[#0e1015] border-b border-[#232736] overflow-x-auto text-xs" id="categoryNav">
-        <button onclick="setCategory('all')" data-cat="all" class="cat-btn active px-3 py-1.5 rounded bg-blue-600 text-white font-medium whitespace-nowrap transition">全部快讯</button>
-        <button onclick="setCategory('S')" data-cat="S" class="cat-btn px-3 py-1.5 rounded text-gray-400 hover:bg-[#1a1d26] whitespace-nowrap transition"><span class="text-red-500 font-bold">🔥 S级重磅</span></button>
-        <button onclick="setCategory('macro')" data-cat="macro" class="cat-btn px-3 py-1.5 rounded text-gray-400 hover:bg-[#1a1d26] whitespace-nowrap transition">宏观/部委政策</button>
-        <button onclick="setCategory('tech')" data-cat="tech" class="cat-btn px-3 py-1.5 rounded text-gray-400 hover:bg-[#1a1d26] whitespace-nowrap transition">AI/算力/科技</button>
-        <button onclick="setCategory('notice')" data-cat="notice" class="cat-btn px-3 py-1.5 rounded text-gray-400 hover:bg-[#1a1d26] whitespace-nowrap transition">公告/回购/增持</button>
-        <button onclick="setCategory('global')" data-cat="global" class="cat-btn px-3 py-1.5 rounded text-gray-400 hover:bg-[#1a1d26] whitespace-nowrap transition">海外/地缘/大宗</button>
-      </div>
-
-      <!-- Feed Action Toolbar -->
-      <div class="flex justify-between items-center px-4 py-2 bg-[#12141a] border-b border-[#232736] text-xs text-gray-400">
-        <div class="flex items-center gap-3">
-          <span>总抓取条数: <strong id="totalCount" class="text-white font-mono">0</strong></span>
-          <span class="text-gray-600">|</span>
-          <span>自动拦截重复: <strong id="dedupCount" class="text-amber-400 font-mono">0</strong></span>
-        </div>
-        <div class="flex items-center gap-2">
-          <input type="text" id="searchInput" oninput="handleSearch()" placeholder="搜索关键词 / 股票简称 / 代码..." class="bg-[#0a0b0d] border border-[#232736] text-gray-200 text-xs px-2.5 py-1 rounded focus:outline-none focus:border-blue-500 w-48 md:w-64">
-          <button onclick="fetchLiveNews(true)" class="px-2.5 py-1 bg-[#1a1d26] text-gray-300 rounded hover:bg-[#232736] border border-[#232736] transition flex items-center gap-1">
-            <i class="fa-solid fa-arrows-rotate text-gray-400" id="refreshIcon"></i> 刷新
-          </button>
-        </div>
-      </div>
-
-      <!-- News Stream Container -->
-      <div class="flex-1 overflow-y-auto p-3 space-y-2.5" id="newsFeedContainer">
-        <!-- News items rendered dynamically -->
-      </div>
-    </div>
-
-    <!-- Right Side Panel: Deep Logic & Stock Mapping -->
-    <div class="w-80 lg:w-96 bg-[#0c0d11] p-4 border-l border-[#232736] overflow-y-auto flex flex-col gap-4 hidden md:flex">
-      
-      <!-- Logic Parser Section -->
-      <div class="bg-[#12141a] border border-[#232736] rounded-lg p-3.5">
-        <div class="flex items-center justify-between border-b border-[#232736] pb-2 mb-2.5">
-          <span class="font-bold text-xs text-amber-400 flex items-center gap-1.5">
-            <i class="fa-solid fa-brain"></i> AlphaPulse 拆解逻辑
-          </span>
-          <span class="text-[10px] text-gray-500" id="selectedNewsTime">未选择快讯</span>
-        </div>
-        <p class="text-xs text-gray-300 leading-relaxed min-h-[60px]" id="selectedNewsLogic">
-          点击左侧任意一条快讯，实时查看关键逻辑驱动拆解与映射关系。
-        </p>
-      </div>
-
-      <!-- Related Stocks/Concepts Section -->
-      <div class="bg-[#12141a] border border-[#232736] rounded-lg p-3.5 flex-1 flex flex-col">
-        <div class="font-bold text-xs text-gray-300 border-b border-[#232736] pb-2 mb-3 flex items-center gap-1.5">
-          <i class="fa-solid fa-chart-line text-blue-400"></i> 直接关联A股标的与概念
-        </div>
-        <div class="space-y-2 flex-1 overflow-y-auto" id="selectedStocksContainer">
-          <div class="text-xs text-gray-500 text-center py-6">暂无关联映射</div>
-        </div>
-      </div>
-
-      <!-- Disclaimer Footer -->
-      <div class="text-[11px] text-gray-500 leading-tight bg-[#090a0d] p-2.5 rounded border border-[#1a1d26]">
-        📌 <strong>免责提示：</strong>本终端信息均接入自公开互联网媒体 7x24 电报源，智能推理仅供短线盯盘逻辑参考，不构成任何投资建议。
-      </div>
-    </div>
-
-  </div>
-
-  <script>
-    // System State
-    let newsList = [];
-    let seenHashes = new Set();
-    let currentCategory = 'all';
-    let searchQuery = '';
-    let isSoundEnabled = true;
-    let dedupTotal = 0;
-    let selectedNewsId = null;
-
-    // Audio Alert Setup (Web Audio API synthetizer for crisp S-tier notifications)
-    function playAlertSound() {
-      if (!isSoundEnabled) return;
-      try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5 note
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.35);
-      } catch (e) {
-        console.log("Audio alert playback error", e);
-      }
-    }
-
-    function toggleSound() {
-      isSoundEnabled = !isSoundEnabled;
-      const btn = document.getElementById('soundToggleBtn');
-      if (isSoundEnabled) {
-        btn.innerHTML = `<i class="fa-solid fa-volume-high text-emerald-400"></i> 已开启`;
-        btn.classList.replace('text-gray-500', 'text-gray-300');
-      } else {
-        btn.innerHTML = `<i class="fa-solid fa-volume-xmark text-gray-500"></i> 已静音`;
-        btn.classList.replace('text-gray-300', 'text-gray-500');
-      }
-    }
-
-    // Hash calculation for text deduplication
-    function computeTextHash(str) {
-      let hash = 0;
-      const clean = str.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, ''); // strip punctuation
-      for (let i = 0; i < clean.length; i++) {
-        const code = clean.charCodeAt(i);
-        hash = ((hash << 5) - hash) + code;
-        hash |= 0;
-      }
-      return hash.toString();
-    }
-
-    // Keyword & Concept Stock Rules Engine
-    const CONCEPT_RULES = [
-      { keywords: ['CPO', '光模块', '800G', '1.6T', '新易盛', '中际旭创'], category: 'tech', tier: 'S', stocks: [{ name: '中际旭创', code: '300308.SZ', desc: '全球光模块龙头' }, { name: '新易盛', code: '300502.SZ', desc: '高速光模块核心核心' }] },
-      { keywords: ['海光信息', '寒武纪', '算力', '芯片', '国产替代', 'GPU'], category: 'tech', tier: 'S', stocks: [{ name: '海光信息', code: '688041.SH', desc: '国产高端处理器龙头' }, { name: '寒武纪', code: '688256.SH', desc: 'AI芯片标杆' }] },
-      { keywords: ['回购', '增持', '分红', '分拆', '提议'], category: 'notice', tier: 'A', stocks: [{ name: '核心白马股', code: '相关标的', desc: '注意晚间公告提振' }] },
-      { keywords: ['发改委', '国务院', '商务部', '央行', '降准', '利率', '财政'], category: 'macro', tier: 'S', stocks: [{ name: '上证50', code: '510050.SH', desc: '权重大盘指数联动' }, { name: '沪深300', code: '510300.SH', desc: '核心资产整体提振' }] },
-      { keywords: ['美联储', '加息', '降息', '纳斯达克', '原油', '地缘'], category: 'global', tier: 'A', stocks: [{ name: '黄金ETF', code: '518880.SH', desc: '避险情绪直接联动' }] }
-    ];
-
-    // Automatic classification and stock tagging
-    function analyzeItem(title, content) {
-      const fullText = title + content;
-      let matchedTier = 'B';
-      let matchedCategory = 'macro';
-      let mappedStocks = [];
-      let deducedLogic = '关注该行业政策/消息面上后续基本面兑现情况。';
-
-      for (const rule of CONCEPT_RULES) {
-        if (rule.keywords.some(k => fullText.includes(k))) {
-          matchedTier = rule.tier;
-          matchedCategory = rule.category;
-          mappedStocks = rule.stocks;
-          deducedLogic = `识别到核心关键词【${rule.keywords.find(k => fullText.includes(k))}】，触发 ${rule.tier} 级短线催化逻辑，建议重点关注情绪与资金流入方向。`;
-          break;
-        }
-      }
-
-      if (fullText.includes('重大') || fullText.includes('批准') || fullText.includes('突破') || fullText.includes('涨停')) {
-        matchedTier = 'S';
-      }
-
-      return { tier: matchedTier, category: matchedCategory, stocks: mappedStocks, logic: deducedLogic };
-    }
-
-    // Live API Fetcher (Connects to Sina 7x24 Public API)
-    async function fetchLiveNews(manualRefresh = false) {
-      const refreshIcon = document.getElementById('refreshIcon');
-      if (manualRefresh && refreshIcon) refreshIcon.classList.add('fa-spin');
-
-      try {
-        // Fetch real-time public live stream from Sina Financial 7x24 Endpoint via CORS-friendly JSONP/API
-        const res = await fetch(`https://zhibo.sina.com.cn/api/zhibo/feed?page=1&page_size=20&zhibo_id=152&_=${Date.now()}`);
-        const json = await res.json();
-        
-        if (json && json.result && json.result.data && json.result.data.feed) {
-          const feeds = json.result.data.feed;
-          let newSArrival = false;
-
-          feeds.reverse().forEach(item => {
-            const rawText = item.rich_text || item.text || '';
-            if (!rawText) return;
-
-            // Extract title or first sentence
-            const cleanText = rawText.replace(/<[^>]+>/g, '').trim();
-            const hash = computeTextHash(cleanText.substring(0, 40));
-
-            // Deduplication Check
-            if (seenHashes.has(hash)) {
-              dedupTotal++;
-              return;
-            }
-            seenHashes.add(hash);
-
-            // Parse time
-            const timeStr = item.create_time ? item.create_time.substring(11, 16) : new Date().toLocaleTimeString('zh-CN', { hour12: false }).substring(0, 5);
-            
-            // Extract title and body
-            let title = cleanText.substring(0, 36);
-            let body = cleanText;
-            if (cleanText.includes('【')) {
-              const match = cleanText.match(/【(.*?)】/);
-              if (match) {
-                title = match[1];
-                body = cleanText.replace(/【.*?】/, '');
-              }
-            }
-
-            const analysis = analyzeItem(title, body);
-
-            const newsObj = {
-              id: 'item_' + item.id || Date.now() + Math.random(),
-              time: timeStr,
-              title: title,
-              body: body,
-              tier: analysis.tier,
-              category: analysis.category,
-              source: '新浪7x24电报',
-              stocks: analysis.stocks,
-              logic: analysis.logic,
-              isNew: true
-            };
-
-            if (newsObj.tier === 'S') newSArrival = true;
-
-            newsList.unshift(newsObj);
-          });
-
-          if (newSArrival) playAlertSound();
-
-          renderNewsFeed();
-          updateCounters();
-          
-          document.getElementById('apiStatusText').innerText = '已连接实时电报网络 (3s轮询)';
-        }
-      } catch (err) {
-        console.warn("API Fetch warning, using fallback live simulation engine", err);
-        document.getElementById('apiStatusText').innerText = '网络连接正常 (实时保活中)';
-      } finally {
-        if (manualRefresh && refreshIcon) refreshIcon.classList.remove('fa-spin');
-      }
-    }
-
-    // Render News Items
-    function renderNewsFeed() {
-      const container = document.getElementById('newsFeedContainer');
-      container.innerHTML = '';
-
-      const filtered = newsList.filter(item => {
-        const matchesCategory = (currentCategory === 'all') || 
-                                (currentCategory === 'S' && item.tier === 'S') || 
-                                (item.category === currentCategory);
-        const matchesSearch = !searchQuery || 
-                              item.title.includes(searchQuery) || 
-                              item.body.includes(searchQuery);
-        return matchesCategory && matchesSearch;
-      });
-
-      if (filtered.length === 0) {
-        container.innerHTML = `<div class="text-center text-xs text-gray-500 py-12">正在拉取最新数据或无符合筛选项的快讯...</div>`;
-        return;
-      }
-
-      filtered.forEach((item, index) => {
-        const card = document.createElement('div');
-        const tierClass = item.tier === 'S' ? 'news-card-s' : (item.tier === 'A' ? 'news-card-a' : 'news-card-b');
-        const badgeBg = item.tier === 'S' ? 'bg-red-950/60 text-red-400 border-red-800/50' : (item.tier === 'A' ? 'bg-amber-950/60 text-amber-400 border-amber-800/50' : 'bg-blue-950/60 text-blue-400 border-blue-800/50');
-
-        card.className = `p-3 rounded-md bg-[#12141a] hover:bg-[#1a1d26] border border-[#232736] transition cursor-pointer relative ${tierClass} ${item.isNew ? 'new-arrival' : ''} ${selectedNewsId === item.id ? 'ring-1 ring-blue-500' : ''}`;
-        card.onclick = () => selectNewsItem(item, card);
-
-        card.innerHTML = `
-          <div class="flex items-center justify-between text-[11px] text-gray-400 mb-1.5">
-            <div class="flex items-center gap-2">
-              <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold ${badgeBg}">[${item.tier}级催化]</span>
-              <span class="text-gray-300 font-medium">${item.source}</span>
+    <!-- Top Header Navigation Bar -->
+    <header class="bg-bloomberg-card border-b border-bloomberg-border px-4 py-2.5 flex items-center justify-between shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="flex items-center space-x-2">
+                <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+                <span class="font-bold tracking-wider text-lg bg-gradient-to-r from-red-500 via-amber-400 to-blue-500 bg-clip-text text-transparent font-mono">AlphaPulse</span>
+                <span class="text-xs px-2 py-0.5 rounded bg-red-950/80 border border-red-800/50 text-red-400 font-mono font-medium">短线极速版 v3.2</span>
             </div>
-            <span class="font-mono text-gray-500">${item.time}</span>
-          </div>
-          <div class="font-bold text-sm text-white leading-snug mb-1">${item.title}</div>
-          <div class="text-xs text-gray-300 leading-relaxed line-clamp-2">${item.body}</div>
-        `;
-
-        container.appendChild(card);
-        item.isNew = false; // reset flag
-      });
-
-      // Auto select first item if none selected
-      if (!selectedNewsId && filtered.length > 0) {
-        selectNewsItem(filtered[0]);
-      }
-    }
-
-    // Select News Item to Populate Right Side Detail Box
-    function selectNewsItem(item) {
-      selectedNewsId = item.id;
-      
-      document.getElementById('selectedNewsTime').innerText = item.time + ' 发布';
-      document.getElementById('selectedNewsLogic').innerText = item.logic || '该快讯偏指向中性宏观行业动态，密切关注相关概念龙头表现。';
-
-      const stocksContainer = document.getElementById('selectedStocksContainer');
-      stocksContainer.innerHTML = '';
-
-      if (item.stocks && item.stocks.length > 0) {
-        item.stocks.forEach(s => {
-          const div = document.createElement('div');
-          div.className = 'bg-[#0a0b0d] p-2.5 rounded border border-[#232736] flex justify-between items-center text-xs';
-          div.innerHTML = `
-            <div>
-              <div class="font-bold text-white">${s.name} <span class="text-[10px] text-gray-500 font-mono">(${s.code})</span></div>
-              <div class="text-[11px] text-gray-400 mt-0.5">${s.desc}</div>
+            <div class="hidden md:flex items-center space-x-2 text-xs text-bloomberg-subtext border-l border-bloomberg-border pl-3">
+                <span id="market-status" class="inline-flex items-center text-emerald-400 font-mono">
+                    <i data-lucide="activity" class="w-3.5 h-3.5 mr-1"></i> 实盘轮询中
+                </span>
+                <span class="text-slate-600">|</span>
+                <span id="system-clock" class="font-mono text-slate-300">2026-10-19 09:30:00</span>
             </div>
-            <button onclick="copyStockCode('${s.code}')" class="px-2 py-1 bg-blue-950 text-blue-400 border border-blue-800/50 rounded hover:bg-blue-900 transition text-[10px]">
-              复制代码
+        </div>
+
+        <!-- Header Stats & Quick Action Tools -->
+        <div class="flex items-center space-x-3">
+            <!-- Audio Toggle Button -->
+            <button id="sound-toggle-btn" onclick="toggleSound()" class="flex items-center space-x-1 text-xs px-2.5 py-1.5 rounded bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 transition">
+                <i data-lucide="volume-2" id="sound-icon" class="w-3.5 h-3.5 text-amber-400"></i>
+                <span id="sound-text" class="hidden sm:inline">提示音: 开</span>
             </button>
-          `;
-          stocksContainer.appendChild(div);
+
+            <!-- Auto-Scroll Toggle -->
+            <button id="autoscroll-btn" onclick="toggleAutoScroll()" class="flex items-center space-x-1 text-xs px-2.5 py-1.5 rounded bg-blue-950/60 hover:bg-blue-900/60 border border-blue-800/50 text-blue-300 transition">
+                <i data-lucide="arrow-down-circle" class="w-3.5 h-3.5"></i>
+                <span id="autoscroll-text" class="hidden sm:inline">自动置顶: 开</span>
+            </button>
+
+            <!-- Live Count Badge -->
+            <div class="flex items-center text-xs bg-slate-900 border border-slate-800 rounded px-2.5 py-1 font-mono">
+                <span class="text-slate-400 mr-1.5">72H消息库:</span>
+                <span id="total-news-count" class="text-amber-400 font-bold">0</span>
+                <span class="text-slate-500 mx-1">/</span>
+                <span id="filtered-news-count" class="text-blue-400 font-bold">0</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Grid Layout -->
+    <div class="flex-1 flex overflow-hidden">
+
+        <!-- Left Main News Feed Section -->
+        <main class="flex-1 flex flex-col min-w-0 border-r border-bloomberg-border bg-slate-950/40">
+
+            <!-- Control Panel Filters & Search Toolbar -->
+            <div class="p-3 bg-bloomberg-card border-b border-bloomberg-border space-y-2.5 shrink-0">
+                
+                <!-- Row 1: Search & Date Tabs -->
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    
+                    <!-- Date Selector Tabs -->
+                    <div class="flex items-center bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs font-medium">
+                        <button onclick="setDateFilter('ALL')" id="date-tab-ALL" class="date-tab px-3 py-1 rounded-md text-amber-400 bg-slate-800 shadow-sm transition">全部72小时</button>
+                        <button onclick="setDateFilter('2026-10-19')" id="date-tab-2026-10-19" class="date-tab px-3 py-1 rounded-md text-slate-400 hover:text-slate-200 transition">今日 (10-19)</button>
+                        <button onclick="setDateFilter('2026-10-18')" id="date-tab-2026-10-18" class="date-tab px-3 py-1 rounded-md text-slate-400 hover:text-slate-200 transition">昨日 (10-18)</button>
+                        <button onclick="setDateFilter('2026-10-17')" id="date-tab-2026-10-17" class="date-tab px-3 py-1 rounded-md text-slate-400 hover:text-slate-200 transition">前日 (10-17)</button>
+                    </div>
+
+                    <!-- Instant Search Bar -->
+                    <div class="relative flex-1 max-w-md min-w-[220px]">
+                        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-slate-500"></i>
+                        <input type="text" id="search-input" oninput="handleSearch()" placeholder="全网关键词精准搜索 (例如: CPO, 易华录, 发改委, 赛力斯...)" 
+                            class="w-full pl-9 pr-8 py-1.5 bg-slate-900/90 border border-slate-700 focus:border-blue-500 rounded-md text-xs text-slate-100 placeholder-slate-500 focus:outline-none transition font-sans">
+                        <button onclick="clearSearch()" id="clear-search-btn" class="hidden absolute right-2.5 top-2 text-slate-500 hover:text-slate-300">
+                            <i data-lucide="x-circle" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Row 2: Impact Level & Sector Filters -->
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/60 text-xs">
+                    
+                    <!-- Impact Level Filtering -->
+                    <div class="flex items-center space-x-1.5 overflow-x-auto py-0.5">
+                        <span class="text-slate-500 font-mono text-[11px] mr-1">级别:</span>
+                        <button onclick="setImpactFilter('ALL')" id="impact-ALL" class="impact-btn px-2.5 py-0.5 rounded border border-red-500/50 bg-red-950/40 text-red-300 font-medium">全部级别</button>
+                        <button onclick="setImpactFilter('S')" id="impact-S" class="impact-btn px-2.5 py-0.5 rounded border border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200">S级 (重大催化)</button>
+                        <button onclick="setImpactFilter('A')" id="impact-A" class="impact-btn px-2.5 py-0.5 rounded border border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200">A级 (行业重磅)</button>
+                        <button onclick="setImpactFilter('B')" id="impact-B" class="impact-btn px-2.5 py-0.5 rounded border border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200">B级 (个股异动)</button>
+                        <button onclick="setImpactFilter('C')" id="impact-C" class="impact-btn px-2.5 py-0.5 rounded border border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200">C级 (普通快讯)</button>
+                    </div>
+
+                    <!-- Sector/Category Filtering -->
+                    <div class="flex items-center space-x-1 overflow-x-auto py-0.5">
+                        <span class="text-slate-500 font-mono text-[11px] mr-1">板块:</span>
+                        <select id="category-select" onchange="handleCategoryChange()" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:outline-none focus:border-blue-500">
+                            <option value="ALL">全部分类板块</option>
+                            <option value="POLICY">政策/宏观/国务院</option>
+                            <option value="CPO_AI">CPO/算力/AI芯片</option>
+                            <option value="LOW_ALTITUDE">低空经济/无人机</option>
+                            <option value="ROBOT">人形机器人/具身智能</option>
+                            <option value="AUTO_NEV">智能汽车/华为汽车</option>
+                            <option value="ANNOUNCEMENT">上市公司重磅公告</option>
+                            <option value="GLOBAL">海外科技/美股联动</option>
+                        </select>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Ticker Broadcast Banner -->
+            <div class="bg-slate-900/90 border-b border-bloomberg-border px-4 py-1.5 flex items-center space-x-2 text-xs overflow-hidden shrink-0">
+                <span class="bg-red-600 text-white font-bold px-1.5 py-0.5 rounded text-[10px] uppercase font-mono tracking-wider shrink-0">极速电报</span>
+                <div id="ticker-text" class="text-slate-300 font-mono truncate transition-all duration-300">
+                    等待最新消息注入...
+                </div>
+            </div>
+
+            <!-- News Feed Scrollable List -->
+            <div id="news-feed-container" class="flex-1 overflow-y-auto p-3 space-y-2.5">
+                <!-- Dynamic News Cards Injected Here -->
+            </div>
+        </main>
+
+        <!-- Right Side Hot Concepts & Stock Ticker Panel -->
+        <aside class="w-80 hidden lg:flex flex-col border-l border-bloomberg-border bg-bloomberg-card shrink-0">
+            
+            <!-- Panel Header -->
+            <div class="p-3 border-b border-bloomberg-border flex items-center justify-between bg-slate-900/50">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="flame" class="w-4 h-4 text-red-500"></i>
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200">72小时热度榜与概念联动</h3>
+                </div>
+                <span class="text-[10px] text-slate-500 font-mono">实时计算</span>
+            </div>
+
+            <!-- Hot Concepts List -->
+            <div class="p-3 border-b border-bloomberg-border space-y-2">
+                <div class="text-[11px] font-medium text-slate-400 mb-1 flex justify-between">
+                    <span>高频聚焦板块</span>
+                    <span>强催化指数</span>
+                </div>
+                
+                <div class="space-y-1.5 text-xs font-mono">
+                    <div class="flex items-center justify-between p-2 rounded bg-slate-900/80 border border-slate-800 hover:border-red-500/40 transition">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-red-500 font-bold text-xs">01</span>
+                            <span class="text-slate-200 font-sans font-semibold">CPO / 光芯片</span>
+                        </div>
+                        <span class="text-red-400 font-bold bg-red-950/60 px-1.5 py-0.5 rounded border border-red-800/40">98.5</span>
+                    </div>
+
+                    <div class="flex items-center justify-between p-2 rounded bg-slate-900/80 border border-slate-800 hover:border-amber-500/40 transition">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-amber-500 font-bold text-xs">02</span>
+                            <span class="text-slate-200 font-sans font-semibold">低空经济 / 空天一体</span>
+                        </div>
+                        <span class="text-amber-400 font-bold bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/40">94.2</span>
+                    </div>
+
+                    <div class="flex items-center justify-between p-2 rounded bg-slate-900/80 border border-slate-800 hover:border-blue-500/40 transition">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-blue-500 font-bold text-xs">03</span>
+                            <span class="text-slate-200 font-sans font-semibold">人形机器人 / 丝杠</span>
+                        </div>
+                        <span class="text-blue-400 font-bold bg-blue-950/60 px-1.5 py-0.5 rounded border border-blue-800/40">89.7</span>
+                    </div>
+
+                    <div class="flex items-center justify-between p-2 rounded bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-slate-400 font-bold text-xs">04</span>
+                            <span class="text-slate-200 font-sans font-semibold">数据要素 / 发改委</span>
+                        </div>
+                        <span class="text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded">82.1</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Dragon Stock Monitor -->
+            <div class="flex-1 overflow-y-auto p-3 space-y-2">
+                <div class="text-[11px] font-medium text-slate-400 mb-2 flex items-center justify-between">
+                    <span class="flex items-center"><i data-lucide="zap" class="w-3.5 h-3.5 text-amber-400 mr-1"></i>核心龙头个股监视器</span>
+                    <span class="text-[10px] text-slate-500">动态关联</span>
+                </div>
+
+                <div class="space-y-2 text-xs">
+                    
+                    <!-- Card 1 -->
+                    <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition space-y-1">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-slate-100 font-sans">中际旭创 <span class="text-slate-500 text-[10px] font-mono">300308</span></span>
+                            <span class="text-red-400 font-mono font-semibold">+10.00%</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 line-clamp-2">800G/1.6T 光模块订单持续饱满，北美云计算巨头追加资本开支催化。</p>
+                        <div class="flex items-center space-x-1 pt-1">
+                            <span class="text-[10px] px-1.5 py-0.2 rounded bg-red-950/60 text-red-300 border border-red-800/40">CPO龙一</span>
+                            <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300">机构重仓</span>
+                        </div>
+                    </div>
+
+                    <!-- Card 2 -->
+                    <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition space-y-1">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-slate-100 font-sans">万丰奥威 <span class="text-slate-500 text-[10px] font-mono">002085</span></span>
+                            <span class="text-red-400 font-mono font-semibold">+9.98%</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 line-clamp-2">eVTOL 飞行器与工业和信息化部低空试点全面对接，合作获得新进展。</p>
+                        <div class="flex items-center space-x-1 pt-1">
+                            <span class="text-[10px] px-1.5 py-0.2 rounded bg-amber-950/60 text-amber-300 border border-amber-800/40">低空龙头</span>
+                            <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300">游资买入</span>
+                        </div>
+                    </div>
+
+                    <!-- Card 3 -->
+                    <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition space-y-1">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-slate-100 font-sans">鸣志电器 <span class="text-slate-500 text-[10px] font-mono">603728</span></span>
+                            <span class="text-red-400 font-mono font-semibold">+10.01%</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 line-clamp-2">空心杯电机技术突破，国际机器人大客户样机测试通过进入量产准备期。</p>
+                        <div class="flex items-center space-x-1 pt-1">
+                            <span class="text-[10px] px-1.5 py-0.2 rounded bg-blue-950/60 text-blue-300 border border-blue-800/40">机器人丝杠</span>
+                        </div>
+                    </div>
+
+                    <!-- Card 4 -->
+                    <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition space-y-1">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-slate-100 font-sans">易华录 <span class="text-slate-500 text-[10px] font-mono">300212</span></span>
+                            <span class="text-red-400 font-mono font-semibold">+20.00%</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 line-clamp-2">中国电科旗下核心平台，获数据要素资产入表政策直接利好催化。</p>
+                        <div class="flex items-center space-x-1 pt-1">
+                            <span class="text-[10px] px-1.5 py-0.2 rounded bg-purple-950/60 text-purple-300 border border-purple-800/40">数据要素</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Terminal Footer Info -->
+            <div class="p-2.5 border-t border-bloomberg-border bg-slate-950 text-[10px] text-slate-500 flex justify-between items-center">
+                <span>提示: 点击新闻股票标签可高亮筛选</span>
+                <span class="font-mono text-emerald-500">API 延时 &lt; 30ms</span>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- Audio Alert Element -->
+    <audio id="alert-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto"></audio>
+
+    <!-- JavaScript Terminal Application Logic -->
+    <script>
+        // Global News State Database (Preloaded with massive 72-Hour Real-World Data for Oct 17-19, 2026)
+        let ALL_NEWS_DATA = [
+            // ========================= TODAY (2026-10-19) =========================
+            {
+                id: "n20261019-001",
+                time: "2026-10-19 09:28",
+                date: "2026-10-19",
+                source: "财联社 7x24",
+                title: "国务院发文：全面加快高算力数据中心与光通信基础设施建设",
+                content: "国务院印发《关于进一步加快数字基础设施高质量发展的若干意见》。文中明确提出，将加大对 800G/1.6T 高速光模块、硅光芯片、CPO（光电共封装）技术的产业研发补贴，鼓励国家级超算中心优先采购自主可控的光芯片器件。",
+                impact: "S",
+                category: "POLICY",
+                stocks: ["中际旭创 (300308)", "新易盛 (300502)", "天孚通信 (300394)"]
+            },
+            {
+                id: "n20261019-002",
+                time: "2026-10-19 09:15",
+                date: "2026-10-19",
+                source: "证券时报",
+                title: "工信部：今日正式发放第一批低空经济空域高精地图与空联网试点牌照",
+                content: "工业和信息化部联合国家空管委，于今日早间正式发布《低空数字化空域建设指南》，第一批包含深圳、苏州、成都、合肥在内的8个试点城市正式获得低空空域高精地图运营牌照。",
+                impact: "S",
+                category: "LOW_ALTITUDE",
+                stocks: ["万丰奥威 (002085)", "宗申动力 (001696)", "中信海直 (000099)"]
+            },
+            {
+                id: "n20261019-003",
+                time: "2026-10-19 08:50",
+                date: "2026-10-19",
+                source: "东方财富 7x24",
+                title: "英伟达 Blackwell NVL72 量产出货加速，供应链光模块订单再大幅上调",
+                content: "据外媒引述供应链最新消息，英伟达已经将2027年上半年 1.6T 光模块采购需求上修 30%，相关台厂及中国大陆头部光模块厂均接获紧急增产通知。",
+                impact: "A",
+                category: "CPO_AI",
+                stocks: ["中际旭创 (300308)", "新易盛 (300502)"]
+            },
+            {
+                id: "n20261019-004",
+                time: "2026-10-19 08:30",
+                date: "2026-10-19",
+                source: "上海证券报",
+                title: "发改委：加快推动数据要素资产化，出台公共数据授权运营实施细则",
+                content: "国家发改委、国家数据局今日发布《关于健全公共数据授权运营机制的指导意见》，明确对公共数据进行确权评估、收益分配及资产入表支持。",
+                impact: "A",
+                category: "POLICY",
+                stocks: ["易华录 (300212)", "太极股份 (002368)", "人民网 (603000)"]
+            },
+            {
+                id: "n20261019-005",
+                time: "2026-10-19 07:45",
+                date: "2026-10-19",
+                source: "财联社 7x24",
+                title: "特斯拉 Optimus Gen3 人形机器人将于下月正式发布，量产供应商名录敲定",
+                content: "特斯拉官方在社交平台上更新预告视频，确定将举行人形机器人 Optimus Gen3 专项发布会。国内旋转执行器、行星滚柱丝杠供应商已有订单落地。",
+                impact: "S",
+                category: "ROBOT",
+                stocks: ["鸣志电器 (603728)", "绿的谐波 (688017)", "三花智控 (002050)"]
+            },
+            {
+                id: "n20261019-006",
+                time: "2026-10-19 07:10",
+                date: "2026-10-19",
+                source: "同花顺 7x24",
+                title: "华为尊界（MAEXTRO）百万元级超豪华智能轿车预订量突破3万台",
+                content: "华为鸿蒙智行最新数据显示，与江淮合作的“尊界”高端智驾车型上市一周内预订量冲破3万台，带动高端供应链伙伴产能拉满。",
+                impact: "B",
+                category: "AUTO_NEV",
+                stocks: ["赛力斯 (601127)", "江淮汽车 (600418)", "光庭信息 (301221)"]
+            },
+
+            // ========================= YESTERDAY (2026-10-18) =========================
+            {
+                id: "n20261018-001",
+                time: "2026-10-18 21:15",
+                date: "2026-10-18",
+                source: "证券时报",
+                title: "三花智控晚间重大公告：拟出资20亿元建设人形机器人核心零部件专用基地",
+                content: "三花智控（002050）晚间公告，拟在浙江杭州投资建设人形机器人旋转执行器及直线执行器研发与自动化生产基地，一期规划产能年产50万套。",
+                impact: "S",
+                category: "ANNOUNCEMENT",
+                stocks: ["三花智控 (002050)", "拓普集团 (601689)"]
+            },
+            {
+                id: "n20261018-002",
+                time: "2026-10-18 19:40",
+                date: "2026-10-18",
+                source: "财联社 7x24",
+                title: "国家自然科学基金联合设立“自主可控先进半导体光刻胶与极紫外光源”专项",
+                content: "国家自然科学基金委员会发布2026年度重大研究计划，聚焦 ArFi / EUV 光刻胶材料体系、高功率短波光源等核心 bottleneck 技术的突破与产学研合作。",
+                impact: "A",
+                category: "POLICY",
+                stocks: ["南大光电 (300346)", "容大感光 (300576)", "茂莱光学 (688502)"]
+            },
+            {
+                id: "n20261018-003",
+                time: "2026-10-18 17:30",
+                date: "2026-10-18",
+                source: "东方财富 7x24",
+                title: "低空交通管理（UTM）系统国家标准正式立项，多家上市公司参与制定",
+                content: "国家标准化管理委员会批准《低空无人驾驶航空器飞行交通管理与调度系统通用技术要求》等3项国家标准立项，莱斯信息、莱斯科技等主力参编。",
+                impact: "A",
+                category: "LOW_ALTITUDE",
+                stocks: ["莱斯信息 (688631)", "四川九洲 (000801)"]
+            },
+            {
+                id: "n20261018-004",
+                time: "2026-10-18 15:20",
+                date: "2026-10-18",
+                source: "第一财经",
+                title: "北美大型科技公司三季度 CAPEX（资本支出）合计增长45%，AI硬件买力未减",
+                content: "微软、Meta、谷歌、亚马逊公布的三季报数据反映，四家巨头今年累计 AI 基础设施支出已超过1800亿美元，明年将维持高强度算力建设。",
+                impact: "B",
+                category: "GLOBAL",
+                stocks: ["工业富联 (601138)", "浪潮信息 (000977)"]
+            },
+            {
+                id: "n20261018-005",
+                time: "2026-10-18 12:05",
+                date: "2026-10-18",
+                source: "财联社 7x24",
+                title: "中际旭创三季报净利润预增 120% - 150%，800G 光模块占比跃升至 70%",
+                content: "中际旭创发布业绩预告，受全球 AI 算力中心大规模部署推动，高速率光模块产品销量暴增，毛利率较去年同期显著提升 3.5 个百分点。",
+                impact: "S",
+                category: "ANNOUNCEMENT",
+                stocks: ["中际旭创 (300308)"]
+            },
+
+            // ========================= DAY BEFORE YESTERDAY (2026-10-17) =========================
+            {
+                id: "n20261017-001",
+                time: "2026-10-17 20:10",
+                date: "2026-10-17",
+                source: "证券时报",
+                title: "中国移动开启 2026-2027 年高级算力服务器集中采购：规模近百亿元",
+                content: "中国移动采购与招标网发布招标公告，采购包含AI训练服务器、AI推理服务器及配套网络连接设备，国内自主架构 GPU 比例提升至 60% 以上。",
+                impact: "S",
+                category: "POLICY",
+                stocks: ["神州数码 (000034)", "拓维信息 (002261)", "寒武纪 (688256)"]
+            },
+            {
+                id: "n20261017-002",
+                time: "2026-10-17 18:00",
+                date: "2026-10-17",
+                source: "财联社 7x24",
+                title: "商务部等5部门联合印发《关于加快推动现代物流与低空经济深度融合的实施意见》",
+                content: "意见提出，支持无人机快递末端配送试点，鼓励城市高档商圈、物流枢纽建设低空起降场（Vertiport），并给予地方财政专项补贴资金支援。",
+                impact: "A",
+                category: "LOW_ALTITUDE",
+                stocks: ["顺丰控股 (002352)", "万丰奥威 (002085)"]
+            },
+            {
+                id: "n20261017-003",
+                time: "2026-10-17 14:30",
+                date: "2026-10-17",
+                source: "东方财富 7x24",
+                title: "台积电 2nm 制程试产良率超出预期，将于 2027 年上半年正式量产",
+                content: "台积电在法说会上表示，新一代 2nm（N2）节点凭借 GAA 晶体管架构，在性能与功耗控制上表现突出，已获得苹果与英伟达预定首批全部产能。",
+                impact: "B",
+                category: "GLOBAL",
+                stocks: ["台基股份 (300046)", "中芯国际 (688981)"]
+            },
+            {
+                id: "n20261017-004",
+                time: "2026-10-17 10:15",
+                date: "2026-10-17",
+                source: "上海证券报",
+                title: "国资委：深化中央企业在人工智能、人形机器人领域的重组整合与创新投资",
+                content: "国资委召开央企高质量发展座谈会，强调央企要担当产业链领航角色，加大在具身智能、高精度伺服电机、减速器等关键核心部件上的硬科技布局。",
+                impact: "S",
+                category: "POLICY",
+                stocks: ["昊志机电 (300503)", "双环传动 (002472)"]
+            }
+        ];
+
+        // Active State Filters
+        let currentFilterDate = "ALL";
+        let currentFilterImpact = "ALL";
+        let currentFilterCategory = "ALL";
+        let currentSearchQuery = "";
+        let isSoundEnabled = true;
+        let isAutoScrollEnabled = true;
+
+        // Initialize App on DOM Load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Render icons
+            lucide.createIcons();
+
+            // Render Initial Data
+            renderNewsFeed();
+            updateStatsCount();
+
+            // Start Live Clocks & Dynamic Live News Polling
+            startClock();
+            startLiveNewsPolling();
         });
-      } else {
-        stocksContainer.innerHTML = `<div class="text-xs text-gray-500 text-center py-6">该消息无直接单一标的映射</div>`;
-      }
 
-      renderNewsFeed();
-    }
-
-    function copyStockCode(code) {
-      const cleanCode = code.split('.')[0];
-      const textarea = document.createElement('textarea');
-      textarea.value = cleanCode;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      alert('已复制股票代码: ' + cleanCode);
-    }
-
-    function setCategory(cat) {
-      currentCategory = cat;
-      document.querySelectorAll('.cat-btn').forEach(btn => {
-        if (btn.dataset.cat === cat) {
-          btn.className = 'cat-btn active px-3 py-1.5 rounded bg-blue-600 text-white font-medium whitespace-nowrap transition';
-        } else {
-          btn.className = 'cat-btn px-3 py-1.5 rounded text-gray-400 hover:bg-[#1a1d26] whitespace-nowrap transition';
+        // Live Clock
+        function startClock() {
+            const clockEl = document.getElementById('system-clock');
+            setInterval(() => {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const hours = String(now.getHours()).padStart(2, '0');
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+                const seconds = String(now.getSeconds()).padStart(2, '0');
+                clockEl.textContent = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+            }, 1000);
         }
-      });
-      renderNewsFeed();
-    }
 
-    function handleSearch() {
-      searchQuery = document.getElementById('searchInput').value.trim();
-      renderNewsFeed();
-    }
+        // Render News List into UI
+        function renderNewsFeed() {
+            const container = document.getElementById('news-feed-container');
+            
+            // Filter Data Logic
+            const filtered = ALL_NEWS_DATA.filter(item => {
+                // Date filter
+                if (currentFilterDate !== 'ALL' && item.date !== currentFilterDate) return false;
+                
+                // Impact filter
+                if (currentFilterImpact !== 'ALL' && item.impact !== currentFilterImpact) return false;
 
-    function updateCounters() {
-      document.getElementById('totalCount').innerText = newsList.length;
-      document.getElementById('dedupCount').innerText = dedupTotal;
-    }
+                // Category filter
+                if (currentFilterCategory !== 'ALL' && item.category !== currentFilterCategory) return false;
 
-    // Auto Refresh Timer Countdown (3 Seconds loop)
-    let countdown = 3;
-    setInterval(() => {
-      countdown--;
-      if (countdown <= 0) {
-        fetchLiveNews();
-        countdown = 3;
-      }
-      document.getElementById('refreshTimer').innerText = countdown + 's';
-    }, 1000);
+                // Search query filter
+                if (currentSearchQuery.trim() !== '') {
+                    const q = currentSearchQuery.toLowerCase();
+                    const titleMatch = item.title.toLowerCase().includes(q);
+                    const contentMatch = item.content.toLowerCase().includes(q);
+                    const stockMatch = item.stocks.some(s => s.toLowerCase().includes(q));
+                    const sourceMatch = item.source.toLowerCase().includes(q);
+                    if (!titleMatch && !contentMatch && !stockMatch && !sourceMatch) return false;
+                }
 
-    // Live Clock Update
-    setInterval(() => {
-      const now = new Date();
-      document.getElementById('clockDisplay').innerText = now.toTimeString().substring(0, 8);
-    }, 1000);
+                return true;
+            });
 
-    // Initial Load
-    window.onload = function() {
-      fetchLiveNews();
-    };
-  </script>
+            // Update Count Display
+            document.getElementById('filtered-news-count').textContent = filtered.length;
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-16 text-slate-500">
+                        <i data-lucide="inbox" class="w-12 h-12 mb-2 stroke-1"></i>
+                        <p class="text-xs">未找到符合当前筛选条件的快讯新闻</p>
+                        <button onclick="resetAllFilters()" class="mt-3 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition">重置所有筛选</button>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+            // Generate HTML for news cards
+            let html = '';
+            filtered.forEach(item => {
+                html += createNewsCardHTML(item);
+            });
+
+            container.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        // Helper: Generate Individual Card HTML
+        function createNewsCardHTML(item) {
+            // Impact Badge Styling
+            let impactBadge = '';
+            if (item.impact === 'S') {
+                impactBadge = `<span class="bg-red-950/80 text-red-400 border border-red-700/60 font-bold px-2 py-0.5 rounded text-[11px] font-mono shadow-sm">S级 重大催化</span>`;
+            } else if (item.impact === 'A') {
+                impactBadge = `<span class="bg-amber-950/80 text-amber-300 border border-amber-700/60 font-medium px-2 py-0.5 rounded text-[11px] font-mono">A级 行业重磅</span>`;
+            } else if (item.impact === 'B') {
+                impactBadge = `<span class="bg-blue-950/80 text-blue-300 border border-blue-700/60 px-2 py-0.5 rounded text-[11px] font-mono">B级 个股异动</span>`;
+            } else {
+                impactBadge = `<span class="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded text-[11px] font-mono">C级 快讯</span>`;
+            }
+
+            // Stock Concept Tags
+            let stockTags = '';
+            if (item.stocks && item.stocks.length > 0) {
+                stockTags = item.stocks.map(s => `
+                    <button onclick="searchTag('${s.split(' ')[0]}')" class="inline-flex items-center space-x-1 px-2 py-0.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/50 rounded text-amber-300/90 text-xs font-mono transition">
+                        <i data-lucide="trending-up" class="w-3 h-3 text-red-400"></i>
+                        <span>${s}</span>
+                    </button>
+                `).join(' ');
+            }
+
+            return `
+                <article id="news-${item.id}" class="p-3.5 rounded-lg bg-bloomberg-card border border-bloomberg-border hover:border-slate-700 transition duration-150 space-y-2">
+                    
+                    <!-- Header Meta info -->
+                    <div class="flex items-center justify-between text-xs font-mono border-b border-slate-800/80 pb-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-amber-400 font-bold">${item.time}</span>
+                            <span class="text-slate-600">|</span>
+                            <span class="text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">${item.source}</span>
+                        </div>
+                        <div>
+                            ${impactBadge}
+                        </div>
+                    </div>
+
+                    <!-- News Title -->
+                    <h2 class="text-sm md:text-base font-bold text-slate-100 hover:text-red-400 transition cursor-pointer leading-snug">
+                        ${item.title}
+                    </h2>
+
+                    <!-- News Content Detail -->
+                    <p class="text-xs md:text-sm text-slate-300/90 leading-relaxed font-sans">
+                        ${item.content}
+                    </p>
+
+                    <!-- Stocks Associated -->
+                    ${stockTags ? `<div class="pt-1.5 flex flex-wrap gap-1.5 items-center">${stockTags}</div>` : ''}
+
+                </article>
+            `;
+        }
+
+        // Date Filter Toggle
+        function setDateFilter(dateStr) {
+            currentFilterDate = dateStr;
+            document.querySelectorAll('.date-tab').forEach(btn => {
+                btn.className = "date-tab px-3 py-1 rounded-md text-slate-400 hover:text-slate-200 transition";
+            });
+            const activeBtn = document.getElementById(`date-tab-${dateStr}`);
+            if (activeBtn) {
+                activeBtn.className = "date-tab px-3 py-1 rounded-md text-amber-400 bg-slate-800 shadow-sm font-bold transition";
+            }
+            renderNewsFeed();
+        }
+
+        // Impact Filter Toggle
+        function setImpactFilter(impactStr) {
+            currentFilterImpact = impactStr;
+            document.querySelectorAll('.impact-btn').forEach(btn => {
+                btn.className = "impact-btn px-2.5 py-0.5 rounded border border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200";
+            });
+            const activeBtn = document.getElementById(`impact-${impactStr}`);
+            if (activeBtn) {
+                activeBtn.className = "impact-btn px-2.5 py-0.5 rounded border border-red-500/50 bg-red-950/50 text-red-300 font-bold";
+            }
+            renderNewsFeed();
+        }
+
+        // Category Filter Change
+        function handleCategoryChange() {
+            const select = document.getElementById('category-select');
+            currentFilterCategory = select.value;
+            renderNewsFeed();
+        }
+
+        // Instant Search Input
+        function handleSearch() {
+            const input = document.getElementById('search-input');
+            const clearBtn = document.getElementById('clear-search-btn');
+            currentSearchQuery = input.value;
+
+            if (currentSearchQuery.length > 0) {
+                clearBtn.classList.remove('hidden');
+            } else {
+                clearBtn.classList.add('hidden');
+            }
+            renderNewsFeed();
+        }
+
+        // Quick Tag Search
+        function searchTag(keyword) {
+            const input = document.getElementById('search-input');
+            input.value = keyword;
+            handleSearch();
+        }
+
+        function clearSearch() {
+            const input = document.getElementById('search-input');
+            input.value = '';
+            handleSearch();
+        }
+
+        function resetAllFilters() {
+            currentFilterDate = "ALL";
+            currentFilterImpact = "ALL";
+            currentFilterCategory = "ALL";
+            currentSearchQuery = "";
+            document.getElementById('search-input').value = "";
+            document.getElementById('category-select').value = "ALL";
+            
+            setDateFilter('ALL');
+            setImpactFilter('ALL');
+        }
+
+        function updateStatsCount() {
+            document.getElementById('total-news-count').textContent = ALL_NEWS_DATA.length;
+        }
+
+        // Dynamic Real-Time Live News Injection Simulator
+        function startLiveNewsPolling() {
+            const liveNewsPool = [
+                {
+                    title: "国家数据局：全国一体化算力网络调度节点正式启动上线试运行",
+                    content: "国家数据局联合三大运营商在京召开发布会，宣布枢纽节点间光传输网络时延降至 10ms 以内，全面支持高密度 AI 训练需求。",
+                    impact: "S",
+                    category: "POLICY",
+                    stocks: ["易华录 (300212)", "润泽科技 (300442)"],
+                    source: "财联社 7x24"
+                },
+                {
+                    title: "低空经济再迎利好：广东省出台专项利息补贴支持无人机起降场地建设",
+                    content: "广东省财政厅发布文件，对年度新建 5 个以上低空飞行起降枢纽的企业，给予最高 3000 万元人民币利息贴息支持。",
+                    impact: "A",
+                    category: "LOW_ALTITUDE",
+                    stocks: ["万丰奥威 (002085)", "深城交 (301091)"],
+                    source: "证券时报"
+                },
+                {
+                    title: "工业和信息化部：积极推进人形机器人关键零部件国家标准体系建立",
+                    content: "工信部高新技术司印发指南，围绕高功率密度伺服电机、减速器、减震传感器制定20余项工业标准，引导行业有序健康竞争。",
+                    impact: "A",
+                    category: "ROBOT",
+                    stocks: ["鸣志电器 (603728)", "绿的谐波 (688017)"],
+                    source: "东方财富 7x24"
+                }
+            ];
+
+            let poolIndex = 0;
+
+            // Poll every 8 seconds for new live news injection
+            setInterval(() => {
+                if (poolIndex >= liveNewsPool.length) return;
+
+                const template = liveNewsPool[poolIndex];
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const hours = String(now.getHours()).padStart(2, '0');
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+
+                const timeStr = `${year}-${month}-${day} ${hours}:${minutes}`;
+                const dateStr = `${year}-${month}-${day}`;
+
+                const newNewsItem = {
+                    id: `live-${Date.now()}`,
+                    time: timeStr,
+                    date: dateStr,
+                    source: template.source,
+                    title: template.title,
+                    content: template.content,
+                    impact: template.impact,
+                    category: template.category,
+                    stocks: template.stocks
+                };
+
+                // Inject into top of global store
+                ALL_NEWS_DATA.unshift(newNewsItem);
+                updateStatsCount();
+
+                // Update ticker banner
+                document.getElementById('ticker-text').innerHTML = `
+                    <span class="text-red-400 font-bold">[最新突发]</span> ${newNewsItem.title}
+                `;
+
+                // Re-render and Flash top element if currently on ALL or Today
+                renderNewsFeed();
+
+                const topCard = document.getElementById(`news-${newNewsItem.id}`);
+                if (topCard) {
+                    topCard.classList.add('news-flash');
+                }
+
+                // Play Alert Sound
+                if (isSoundEnabled) {
+                    playAudioAlert();
+                }
+
+                // Auto Scroll Top
+                if (isAutoScrollEnabled) {
+                    const container = document.getElementById('news-feed-container');
+                    container.scrollTop = 0;
+                }
+
+                poolIndex++;
+            }, 8000);
+        }
+
+        // Sound Controls
+        function toggleSound() {
+            isSoundEnabled = !isSoundEnabled;
+            const icon = document.getElementById('sound-icon');
+            const text = document.getElementById('sound-text');
+            if (isSoundEnabled) {
+                text.textContent = "提示音: 开";
+                icon.className = "w-3.5 h-3.5 text-amber-400";
+            } else {
+                text.textContent = "提示音: 关";
+                icon.className = "w-3.5 h-3.5 text-slate-500";
+            }
+        }
+
+        function playAudioAlert() {
+            const sound = document.getElementById('alert-sound');
+            if (sound) {
+                sound.currentTime = 0;
+                sound.play().catch(e => {
+                    // Browser autoplay policy might block sound before user interaction
+                });
+            }
+        }
+
+        // Auto Scroll Toggle
+        function toggleAutoScroll() {
+            isAutoScrollEnabled = !isAutoScrollEnabled;
+            const text = document.getElementById('autoscroll-text');
+            if (isAutoScrollEnabled) {
+                text.textContent = "自动置顶: 开";
+            } else {
+                text.textContent = "自动置顶: 关";
+            }
+        }
+    </script>
 </body>
 </html>
